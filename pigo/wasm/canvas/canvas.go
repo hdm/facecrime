@@ -109,10 +109,10 @@ func (c *Canvas) Render() error {
 			data = make([]byte, len(data))
 
 			res := det.DetectFaces(pixels, height, width)
-			c.processFaces(res)
 
-			// Debugging
 			c.drawDetection(res)
+
+			c.processFaces(res)
 
 			// Disabled for now
 			// c.window.Get("stats").Call("end")

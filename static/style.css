@@ -9,7 +9,7 @@ html, body {
 
 #webcam {
 	position: absolute;
-	left: 99%; top: 103%;
+	left: 90%; top: 90%;
 	transform: translate(-90%, -90%);
     width: 15%;
     z-index: 999;

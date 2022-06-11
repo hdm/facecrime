@@ -20,10 +20,12 @@ import (
 	"golang.org/x/image/font/opentype"
 )
 
-var gameWidth = 640 * 2
-var gameHeight = 480 * 2
 var camWidth = 640
 var camHeight = 480
+
+// TODO: translate cam coords from 1.777 to 1.333 ratio to use 1920x1080
+var gameWidth = camWidth * 3
+var gameHeight = camHeight * 3
 
 var debug = false
 
@@ -39,6 +41,7 @@ func (g *Game) Update() error {
 }
 
 var ticks uint64
+var ticksSinceFace uint64
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	ticks++
@@ -62,6 +65,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		return
 	}
 
+	ticksSinceFace++
+	if ticksSinceFace < (uint64(ebiten.MaxTPS()) * 3) {
+		text.Draw(screen, "There you are. Lets play a game.", mplusBigFont, 0, mplusBigFont.Metrics().Height.Round()*3, color.RGBA{0xff, 0x00, 0x00, 0xff})
+	}
+
 	faceClr := color.RGBA{255, 0, 0, 255}
 	leftClr := color.RGBA{0, 0, 255, 255}
 	rightClr := color.RGBA{255, 0, 255, 255}
@@ -70,32 +78,36 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// drawface
 	_ = faceClr
 
-	row, col, scale := translateXFromCam(f.area[1]), translateYFromCam(f.area[0]), translateScaleFromCam(f.area[2])
+	row, col, scale := f.area[1], f.area[0], float32(f.area[2])
+
 	//g.drawCircle(screen, row+(scale/2), col, 256, faceClr)
 
 	if f.left != nil {
-		row, col, scale = translateXFromCam(f.left.Row), translateYFromCam(f.left.Col), translateScaleFromCam(int(f.left.Scale))
+		col, row, scale = f.left.Row, f.left.Col, f.left.Scale // These ARE flipped (row vs col) intentionally
 		// g.drawCircle(screen, col+(scale/2), row, 32, leftClr)
-		text.Draw(screen, "L", mplusNormalFont, col+(scale/2), row, leftClr)
+		text.Draw(screen, fmt.Sprintf("%d", f.left.Perturbs), mplusNormalFont, row+int(scale/2), col, leftClr)
 	}
 	if f.right != nil {
-		row, col, scale = translateXFromCam(f.right.Row), translateYFromCam(f.right.Col), translateScaleFromCam(int(f.right.Scale))
+		col, row, scale = f.right.Row, f.right.Col, f.right.Scale // These ARE flipped (row vs col) intentionally
 		// g.drawCircle(screen, col+(scale/2), row, 32, rightClr)
 		_ = rightClr
-		text.Draw(screen, "R", mplusNormalFont, col+(scale/2), row, rightClr)
+		text.Draw(screen, fmt.Sprintf("%d", f.right.Perturbs), mplusNormalFont, row+int(scale/2), col, rightClr)
 	}
 
 	for i, m := range f.marks {
-		row, col, scale = translateXFromCam(m[1]), translateYFromCam(m[0]), translateScaleFromCam(int(m[2]))
+		col, row, scale = m[1], m[0], float32(m[2]) // These ARE flipped (row vs col) intentionally
 		// g.drawCircle(screen, col+(scale/2), row, 4, markClr)
 		msg := fmt.Sprintf("%.2d", i)
-		text.Draw(screen, msg, mplusNormalFont, col+(scale/2), row, markClr)
+		text.Draw(screen, msg, mplusNormalFont, row+int(scale/2), col, markClr)
 	}
 
 	if debug {
 		ebitenutil.DebugPrint(screen, fmt.Sprintf(
-			"FACES: %v\nAREA: %v [%v/%v/%v]\nLEFT: %v\nRIGHT: %v\nMARKS: %v\nLAST: %s\n",
-			f.total, f.area, row, col, scale, f.left, f.right, f.marks, time.Since(time.Unix(0, f.ts))))
+			"FACES: %v\nAREA: %v [%v/%v/%v]\nLEFT: %v\nRIGHT: %v\nMARKS: %v\nLAST: %s\nDIM:%d/%d\nX: %d-%d\nY: %d/%d\n",
+			f.total, f.area, row, col, scale, f.left, f.right, f.marks, time.Since(time.Unix(0, f.ts)),
+			f.width, f.height,
+			f.minX, f.maxX, f.minY, f.maxY,
+		))
 	}
 }
 
@@ -147,25 +159,88 @@ func setFace(f *Face) {
 }
 
 type Face struct {
-	left  *pigo.Puploc
-	right *pigo.Puploc
-	marks [][]int
-	total int
-	index int
-	area  []int
-	ts    int64
+	left   *pigo.Puploc
+	right  *pigo.Puploc
+	marks  [][]int
+	total  int
+	index  int
+	area   []int
+	ts     int64
+	width  int
+	height int
+	minX   int
+	maxX   int
+	minY   int
+	maxY   int
 }
 
 func processFaces(cnt int, idx int, area []int, left *pigo.Puploc, right *pigo.Puploc, landmarks [][]int) {
 	if cnt > 0 {
+
+		minX := area[1]
+		maxX := area[1]
+		minY := area[0]
+		maxY := area[0]
+
+		for _, m := range landmarks {
+			if m[0] < minX {
+				minX = m[0]
+			}
+			if m[0] > maxX {
+				maxX = m[0]
+			}
+			if m[1] < minY {
+				minY = m[1]
+			}
+			if m[1] > maxY {
+				maxY = m[1]
+			}
+		}
+
+		width := maxX - minX
+		height := maxY - minY
+
+		// Scale the coordinates based on the min width/height
+		// Use up to X% of the screen
+		xScale := (float64(gameWidth) * 0.50) / float64(width)
+		yScale := (float64(gameHeight) * 0.50) / float64(height)
+
+		xShift := int((float64(width) / 2) * xScale)
+		yShift := int((float64(height) / 2) * yScale)
+
+		// Scale the face box
+		area[0] = int(float64(area[0]-minY) * yScale) // Y
+		area[1] = int(float64(area[1]-minX) * xScale) // X
+
+		// Pupal locations have rows/cols backwards
+		if right != nil {
+			right.Row = int(float64(right.Row-minY)*yScale) + yShift // Actually column
+			right.Col = int(float64(right.Col-minX)*xScale) + xShift // Actually row
+		}
+		if left != nil {
+			left.Row = int(float64(left.Row-minY)*yScale) + yShift // Actually column
+			left.Col = int(float64(left.Col-minX)*xScale) + xShift // Actually row
+		}
+
+		for _, m := range landmarks {
+			m[1] = int(float64(m[1]-minY)*yScale) + yShift
+			m[0] = int(float64(m[0]-minX)*xScale) + xShift
+		}
+
 		f := &Face{
-			total: cnt,
-			index: idx,
-			left:  left,
-			right: right,
-			marks: landmarks,
-			area:  area,
-			ts:    time.Now().UnixNano(),
+			total:  cnt,
+			index:  idx,
+			left:   left,
+			right:  right,
+			marks:  landmarks,
+			area:   area,
+			ts:     time.Now().UnixNano(),
+			width:  width,
+			height: height,
+			minX:   minX,
+			maxX:   maxX,
+			minY:   minY,
+			maxY:   maxY,
 		}
 		setFace(f)
 	}
@@ -232,7 +307,7 @@ func main() {
 
 	const dpi = 72
 	mplusNormalFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
-		Size:    10,
+		Size:    22,
 		DPI:     dpi,
 		Hinting: font.HintingFull,
 	})
