@@ -43,27 +43,32 @@ type Canvas struct {
 var det *detector.Detector
 
 // NewCanvas creates and initializes the new Canvas element
-func NewCanvas(fcb func(int, int, []int, *pigo.Puploc, *pigo.Puploc, [][]int)) *Canvas {
+func NewCanvas(fcb func(int, int, []int, *pigo.Puploc, *pigo.Puploc, [][]int), styleText string) *Canvas {
 	var c Canvas
 	c.window = js.Global()
 	c.doc = c.window.Get("document")
 	c.body = c.doc.Get("body")
 
+	// Add the stylesheet
+	styleSheet := c.doc.Call("createElement", "style")
+	styleSheet.Set("type", "text/css")
+	styleSheet.Set("innerHTML", styleText)
+	c.doc.Get("head").Call("appendChild", styleSheet)
+
+	// Configure the capture canvas
 	c.windowSize.width = 640
 	c.windowSize.height = 480
-
 	c.canvas = c.doc.Call("createElement", "canvas")
 	c.canvas.Set("width", c.windowSize.width)
 	c.canvas.Set("height", c.windowSize.height)
 	c.canvas.Set("id", "webcam")
-	c.canvas.Set("style", "x: 600; y: 500;")
 	c.body.Call("appendChild", c.canvas)
 
 	c.ctx = c.canvas.Call("getContext", "2d")
 	c.showPupil = true
-	c.showCoord = true
+	c.showCoord = false
 	c.flploc = true
-	c.markerType = "rect"
+	c.markerType = "none"
 	c.faceCallback = fcb
 
 	det = detector.NewDetector()
@@ -234,13 +239,13 @@ func (c *Canvas) drawDetection(dets [][]int) {
 	for i := 0; i < len(dets); i++ {
 		if dets[i][3] > 50 {
 			c.ctx.Call("beginPath")
-			c.ctx.Set("lineWidth", 3)
-			c.ctx.Set("strokeStyle", "red")
+			c.ctx.Set("lineWidth", 1)
+			c.ctx.Set("strokeStyle", "white")
 
 			row, col, scale := dets[i][1], dets[i][0], dets[i][2]
 			if c.showCoord {
 				c.ctx.Set("fillStyle", "red")
-				c.ctx.Set("font", "18px Arial")
+				c.ctx.Set("font", "24px Arial")
 				message := fmt.Sprintf("(%v, %v)", row-scale/2, col-scale/2)
 				txtWidth := c.ctx.Call("measureText", js.ValueOf(message)).Get("width").Int()
 				c.ctx.Call("fillText", message, (row-scale/2)-txtWidth/2, col-scale/2-10)
@@ -254,6 +259,8 @@ func (c *Canvas) drawDetection(dets [][]int) {
 			case "ellipse":
 				c.ctx.Call("moveTo", row+int(scale/2), col)
 				c.ctx.Call("ellipse", row, col, scale/2, float64(scale)/1.6, 0, 0, 2*math.Pi)
+			case "none":
+
 			}
 			c.ctx.Call("stroke")
 
@@ -276,7 +283,7 @@ func (c *Canvas) drawDetection(dets [][]int) {
 				if c.flploc {
 					flps := det.DetectLandmarkPoints(leftPupil, rightPupil)
 					c.ctx.Call("beginPath")
-					c.ctx.Set("fillStyle", "rgb(0, 255, 0)")
+					c.ctx.Set("fillStyle", "rgb(255, 0, 255)")
 					for _, flp := range flps {
 						if len(flp) > 0 {
 							col, row, scale = flp[1], flp[0], flp[2]/7

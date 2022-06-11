@@ -7,7 +7,6 @@ import (
 	_ "image/png"
 	"log"
 	"math"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -16,14 +15,17 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/text"
 	pigo "github.com/hdm/facecrime/pigo/core"
+	"github.com/hdm/facecrime/static"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 )
 
-var gameWidth = 1920
-var gameHeight = 1080
+var gameWidth = 640 * 2
+var gameHeight = 480 * 2
 var camWidth = 640
 var camHeight = 480
+
+var debug = false
 
 var (
 	mplusNormalFont font.Face
@@ -41,22 +43,22 @@ var ticks uint64
 func (g *Game) Draw(screen *ebiten.Image) {
 	ticks++
 	if ticks < uint64(ebiten.MaxTPS()) {
-		screen.DrawImage(splashEE, &ebiten.DrawImageOptions{})
+		displaySplashEE(screen)
 		return
 	}
 
 	screen.Fill(color.RGBA{0, 0, 0, 0xff})
 
 	if !isCameraAvailable {
-		screen.Fill(color.RGBA{0xff, 0, 0, 0xff})
-		ebitenutil.DebugPrint(screen, "No camera available")
+		screen.Fill(color.RGBA{0x00, 0x00, 0x00, 0xff})
+		text.Draw(screen, "Hi! Turn on your camera. Don't be shy.", mplusBigFont, mplusBigFont.Metrics().Height.Round()*3, 0, color.White)
 		return
 	}
 
 	f := getFace()
 	if f == nil {
-		screen.Fill(color.RGBA{0x0, 0xff, 0, 0xff})
-		ebitenutil.DebugPrint(screen, "No face detected. Get closer")
+		screen.Fill(color.RGBA{0x00, 0x00, 0x00, 0xff})
+		text.Draw(screen, "Hi! I can't see your face. Get closer.", mplusBigFont, 0, mplusBigFont.Metrics().Height.Round()*3, color.White)
 		return
 	}
 
@@ -90,9 +92,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		text.Draw(screen, msg, mplusNormalFont, col+(scale/2), row, markClr)
 	}
 
-	ebitenutil.DebugPrint(screen, fmt.Sprintf(
-		"FACES: %v\nAREA: %v [%v/%v/%v]\nLEFT: %v\nRIGHT: %v\nMARKS: %v\nLAST: %s\n",
-		f.total, f.area, row, col, scale, f.left, f.right, f.marks, time.Since(time.Unix(0, f.ts))))
+	if debug {
+		ebitenutil.DebugPrint(screen, fmt.Sprintf(
+			"FACES: %v\nAREA: %v [%v/%v/%v]\nLEFT: %v\nRIGHT: %v\nMARKS: %v\nLAST: %s\n",
+			f.total, f.area, row, col, scale, f.left, f.right, f.marks, time.Since(time.Unix(0, f.ts))))
+	}
 }
 
 func (g *Game) drawCircle(screen *ebiten.Image, x, y, radius int, clr color.Color) {
@@ -171,8 +175,38 @@ var splashEE *ebiten.Image
 var splashUS *ebiten.Image
 
 func loadImage(path string) (*ebiten.Image, error) {
-	img, _, err := ebitenutil.NewImageFromFile(filepath.Join("images", path))
+	fd, err := static.Files.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer fd.Close()
+
+	img, _, err := ebitenutil.NewImageFromReader(fd)
 	return img, err
+}
+
+func displaySplashEE(screen *ebiten.Image) {
+	sw, sh := screen.Size()
+	w, h := splashEE.Size()
+
+	op := &ebiten.DrawImageOptions{}
+
+	// Move the images's center to the upper left corner.
+	op.GeoM.Translate(float64(-w)/2, float64(-h)/2)
+
+	// Scale it down
+	op.GeoM.Scale(0.5, 0.5)
+
+	// Scale the image by the device ratio so that the rendering result can be same
+	// on various (different-DPI) environments.
+	scale := ebiten.DeviceScaleFactor()
+	op.GeoM.Scale(scale, scale)
+
+	// Move the image's center to the screen's center.
+	op.GeoM.Translate(float64(sw)/2, float64(sh)/2)
+
+	op.Filter = ebiten.FilterLinear
+	screen.DrawImage(splashEE, op)
 }
 
 func initImages() {
@@ -183,6 +217,7 @@ func initImages() {
 		log.Fatalf("failed to read splash: %v", err)
 		return
 	}
+
 }
 
 var isCameraAvailable bool
