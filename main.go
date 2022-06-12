@@ -67,7 +67,13 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	ticksSinceFace++
 	if ticksSinceFace < (uint64(ebiten.MaxTPS()) * 3) {
-		text.Draw(screen, "There you are. Lets play a game.", mplusBigFont, 0, mplusBigFont.Metrics().Height.Round()*3, color.RGBA{0xff, 0x00, 0x00, 0xff})
+		text.Draw(screen, "There you are. Let's play a game.", mplusBigFont, 0, mplusBigFont.Metrics().Height.Round()*4, color.RGBA{0xf0, 0x00, 0x80, 0xff})
+	}
+
+	if time.Since(time.Unix(0, f.ts)) > time.Second {
+		text.Draw(screen, "I lost you. Come back!", mplusBigFont, 0, gameHeight-mplusBigFont.Metrics().Height.Round(), color.RGBA{0xf0, 0x00, 0x80, 0xff})
+	} else {
+		text.Draw(screen, "Looking good!", mplusBigFont, 0, gameHeight-mplusBigFont.Metrics().Height.Round(), color.RGBA{0x00, 0x80, 0x00, 0xff})
 	}
 
 	faceClr := color.RGBA{255, 0, 0, 255}
