@@ -6,7 +6,7 @@ require (
 	github.com/fogleman/gg v1.3.0
 	github.com/hajimehoshi/ebiten v1.12.12
 	github.com/hajimehoshi/ebiten/v2 v2.4.0-alpha.6.0.20220611103717-08b52698c62b
-	golang.org/x/image v0.0.0-20220321031419-a8550c1d254a
+	golang.org/x/image v0.5.0
 )
 
 require (
@@ -17,5 +17,5 @@ require (
 	golang.org/x/exp v0.0.0-20190731235908-ec7cb31e5a56 // indirect
 	golang.org/x/mobile v0.0.0-20220518205345-8578da9835fd // indirect
 	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f // indirect
-	golang.org/x/text v0.3.8 // indirect
+	golang.org/x/text v0.7.0 // indirect
 )
